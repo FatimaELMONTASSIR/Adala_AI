@@ -1,5 +1,5 @@
 """
-Chaîne RAG : récupération d'articles, construction du contexte, appel Gemini (Google).
+Chaîne RAG : récupération d'articles, construction du contexte, appel LLM (Gemini ou Groq).
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 import google.generativeai as genai
+from groq import Groq
 
 from backend.rag.prompt import PHRASE_REFUS, SYSTEM_PROMPT
 from backend.rag.retriever import retrieve
@@ -67,6 +68,14 @@ def _format_context(sources: list[dict[str, Any]]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+def _fournisseur_llm() -> str:
+    """``gemini`` (défaut) ou ``groq`` (voir ``LEXMAROC_LLM``)."""
+    v = (os.environ.get("LEXMAROC_LLM", "") or "gemini").strip().lower()
+    if v in ("groq", "gemini"):
+        return v
+    return "gemini"
+
+
 def _cle_gemini() -> str | None:
     """Clé API : GEMINI_API_KEY, puis GOOGLE_API_KEY (défaut Google AI Studio)."""
     return (
@@ -74,6 +83,10 @@ def _cle_gemini() -> str | None:
         or os.environ.get("GOOGLE_API_KEY", "").strip()
         or None
     )
+
+
+def _cle_groq() -> str | None:
+    return (os.environ.get("GROQ_API_KEY", "") or "").strip() or None
 
 
 def _nom_modele_court(nom_api: str) -> str:
@@ -154,30 +167,52 @@ def _historique_gemini(chat_history: list[dict[str, str]]) -> list[dict[str, Any
     return historique
 
 
-def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str, Any]:
-    """
-    Pose une question au modèle en s'appuyant sur la recherche vectorielle.
+def _messages_groq(
+    chat_history: list[dict[str, str]], user_payload: str
+) -> list[dict[str, str]]:
+    """Historique + dernier message utilisateur (corpus + question) pour l'API Groq."""
+    msgs: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for tour in chat_history:
+        role = tour.get("role", "")
+        texte = (tour.get("content") or "").strip()
+        if not texte:
+            continue
+        if role == "user":
+            msgs.append({"role": "user", "content": texte})
+        elif role == "assistant":
+            msgs.append({"role": "assistant", "content": texte})
+    msgs.append({"role": "user", "content": user_payload})
+    return msgs
 
-    Retourne : answer / answer_short (résumé), answer_detail (optionnel), sources.
-    """
-    cle = _cle_gemini()
-    if not cle:
-        raise ValueError(
-            "Aucune clé API Gemini : définissez GEMINI_API_KEY ou GOOGLE_API_KEY "
-            "(ex. clé créée dans Google AI Studio)."
-        )
-    modele_demande = os.environ.get("GEMINI_MODEL", "").strip() or None
-    max_tokens = int(os.environ.get("MAX_TOKENS", "2048"))
 
+def _groq_temperature() -> float:
     try:
-        sources = retrieve(question)
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        raise RuntimeError(
-            f"Impossible de récupérer les articles pertinents : {exc}"
-        ) from exc
+        return float(os.environ.get("GROQ_TEMPERATURE", "0.3"))
+    except ValueError:
+        return 0.3
 
+
+def _groq_modele_defaut() -> str:
+    return (os.environ.get("GROQ_MODEL", "") or "").strip() or "llama-3.3-70b-versatile"
+
+
+def _completer_groq(
+    client: Groq,
+    modele: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+) -> str:
+    resp = client.chat.completions.create(
+        model=modele,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=_groq_temperature(),
+    )
+    choix = resp.choices[0].message
+    return ((choix.content or "") if choix else "").strip()
+
+
+def _construire_bloc_utilisateur(question: str, sources: list[dict[str, Any]]) -> str:
     context = _format_context(sources)
     consigne_retrieval = ""
     if sources:
@@ -191,7 +226,7 @@ def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str,
         "\n\n[Format] Réponds avec les sections ### Résumé puis ### Détail "
         "(voir instructions système). Pour la seule phrase de refus, aucune section."
     )
-    bloc_utilisateur = (
+    return (
         "Voici les articles du corpus pouvant être pertinents :\n\n"
         f"{context}\n\n"
         "---\n\n"
@@ -200,25 +235,25 @@ def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str,
         f"{consigne_format}"
     )
 
+
+def _generer_avec_gemini(
+    cle: str,
+    modele_demande: str | None,
+    max_tokens: int,
+    chat_history: list[dict[str, str]],
+    bloc_utilisateur: str,
+) -> tuple[str, Any]:
     genai.configure(api_key=cle)
     modele = _selectionner_modele_gemini(cle, modele_demande)
-
     generation_config = {"max_output_tokens": max_tokens}
     modele_ia = genai.GenerativeModel(
         model_name=modele,
         system_instruction=SYSTEM_PROMPT,
         generation_config=generation_config,
     )
-
     historique = _historique_gemini(chat_history)
-    try:
-        chat = modele_ia.start_chat(history=historique)
-        reponse = chat.send_message(bloc_utilisateur)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Erreur de l'API Gemini lors de la génération de la réponse : {exc}"
-        ) from exc
-
+    chat = modele_ia.start_chat(history=historique)
+    reponse = chat.send_message(bloc_utilisateur)
     try:
         texte = (reponse.text or "").strip()
     except ValueError:
@@ -226,11 +261,82 @@ def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str,
             "La réponse du modèle est vide ou a été filtrée par les règles de "
             "sécurité. Reformulez votre question ou vérifiez le corpus."
         )
+    return texte, chat
 
-    texte = _corriger_refus_abusif(chat, texte, sources)
+
+def _generer_avec_groq(
+    cle: str,
+    modele: str,
+    max_tokens: int,
+    chat_history: list[dict[str, str]],
+    bloc_utilisateur: str,
+) -> tuple[str, list[dict[str, str]]]:
+    client = Groq(api_key=cle)
+    messages = _messages_groq(chat_history, bloc_utilisateur)
+    texte = _completer_groq(client, modele, messages, max_tokens)
+    return texte, messages
+
+
+def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str, Any]:
+    """
+    Pose une question au modèle en s'appuyant sur la recherche vectorielle.
+
+    Retourne : answer / answer_short (résumé), answer_detail (optionnel), sources.
+    Fournisseur : ``LEXMAROC_LLM=gemini`` (défaut) ou ``groq``.
+    """
+    fournisseur = _fournisseur_llm()
+    max_tokens = int(os.environ.get("MAX_TOKENS", "2048"))
+
+    try:
+        sources = retrieve(question)
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"Impossible de récupérer les articles pertinents : {exc}"
+        ) from exc
+
+    bloc_utilisateur = _construire_bloc_utilisateur(question, sources)
+
+    if fournisseur == "groq":
+        cle_g = _cle_groq()
+        if not cle_g:
+            raise ValueError(
+                "LEXMAROC_LLM=groq : définissez GROQ_API_KEY "
+                "(https://console.groq.com/keys)."
+            )
+        modele_g = _groq_modele_defaut()
+        try:
+            texte, messages = _generer_avec_groq(
+                cle_g, modele_g, max_tokens, chat_history, bloc_utilisateur
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Erreur de l'API Groq lors de la génération de la réponse : {exc}"
+            ) from exc
+        texte = _corriger_refus_abusif_groq(
+            cle_g, modele_g, max_tokens, messages, texte, sources
+        )
+    else:
+        cle = _cle_gemini()
+        if not cle:
+            raise ValueError(
+                "Aucune clé API Gemini : définissez GEMINI_API_KEY ou GOOGLE_API_KEY "
+                "(ex. clé créée dans Google AI Studio), ou passez à Groq avec "
+                "LEXMAROC_LLM=groq et GROQ_API_KEY."
+            )
+        modele_demande = os.environ.get("GEMINI_MODEL", "").strip() or None
+        try:
+            texte, chat = _generer_avec_gemini(
+                cle, modele_demande, max_tokens, chat_history, bloc_utilisateur
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Erreur de l'API Gemini lors de la génération de la réponse : {exc}"
+            ) from exc
+        texte = _corriger_refus_abusif(chat, texte, sources)
 
     resume, detail = _parser_resume_detail(texte)
-    # Compatibilité : « answer » = résumé court affiché par défaut
     return {
         "answer": resume,
         "answer_short": resume,
@@ -275,6 +381,39 @@ def _corriger_refus_abusif(
     try:
         reponse2 = chat.send_message(relance)
         t2 = (reponse2.text or "").strip()
+        if t2:
+            return t2
+    except Exception:
+        pass
+    return texte
+
+
+def _corriger_refus_abusif_groq(
+    cle: str,
+    modele: str,
+    max_tokens: int,
+    messages: list[dict[str, str]],
+    texte: str,
+    sources: list[dict[str, Any]],
+) -> str:
+    if not sources or not _extraits_substantiels(sources):
+        return texte
+    if not _reponse_est_refus(texte):
+        return texte
+    relance = (
+        "Les extraits juridiques ci-dessus ont été fournis dans ton message précédent "
+        "et contiennent du texte. Réponds maintenant en t'appuyant exclusivement sur ces "
+        "extraits : résume ce qu'ils établissent concernant la question, avec citations "
+        "(nom du code et numéro d'article). Utilise les sections ### Résumé et ### Détail. "
+        f"N'écris pas la phrase : « {PHRASE_REFUS} »."
+    )
+    msgs2 = messages + [
+        {"role": "assistant", "content": texte},
+        {"role": "user", "content": relance},
+    ]
+    client = Groq(api_key=cle)
+    try:
+        t2 = _completer_groq(client, modele, msgs2, max_tokens)
         if t2:
             return t2
     except Exception:

@@ -1,6 +1,6 @@
 # LexMaroc
 
-**LexMaroc** est une application d'assistance juridique spécialisée dans le droit marocain (français uniquement), basée sur une architecture **RAG** (génération augmentée par récupération) et l'API **Gemini** de Google. Les textes sont indexés dans **MongoDB Atlas** et **Qdrant Cloud** ; l'interface est développée avec **Streamlit**.
+**LexMaroc** est une application d'assistance juridique spécialisée dans le droit marocain (français uniquement), basée sur une architecture **RAG** (génération augmentée par récupération) et un LLM (**Gemini** Google ou **Groq**). Les textes sont indexés dans **MongoDB Atlas** et **Qdrant Cloud** ; l'interface est développée avec **Streamlit**.
 
 ## Architecture (schéma ASCII)
 
@@ -29,15 +29,15 @@
               Question utilisateur ────────┼──────── RAG (retrieve + prompt)
                                            ▼
                                   ┌────────────────┐
-                                  │ Google Gemini  │
-                                  │ API            │
+                                  │ Gemini / Groq  │
+                                  │ (LLM)          │
                                   └────────────────┘
 ```
 
 ## Prérequis
 
 1. **Python 3.11 ou supérieur**
-2. Clé API **Gemini** : créez une clé sur [Google AI Studio](https://aistudio.google.com/apikey) et définissez **`GEMINI_API_KEY`** ou **`GOOGLE_API_KEY`** (les deux sont acceptés).
+2. Clé LLM : par défaut **Gemini** — clé sur [Google AI Studio](https://aistudio.google.com/apikey), variables **`GEMINI_API_KEY`** ou **`GOOGLE_API_KEY`**. Pour **Groq**, définissez **`LEXMAROC_LLM=groq`**, **`GROQ_API_KEY`** ([console Groq](https://console.groq.com/keys)) et optionnellement **`GROQ_MODEL`** (ex. `llama-3.3-70b-versatile`).
 3. Cluster **MongoDB Atlas** (gratuit M0) et chaîne de connexion `mongodb+srv://...`
 4. Instance **Qdrant Cloud** (gratuit) : URL (`https://....qdrant.io`) et clé API
 5. Fichiers **PDF** des codes à indexer (par défaut dans `lexmaroc/data/`, ou un autre dossier via `LEXMAROC_DATA_DIR`, voir ci-dessous)
@@ -68,7 +68,7 @@
 4. Configurer les variables d'environnement :
 
    - Copier le fichier `env.example.txt` vers un fichier nommé `.env` **à la racine du dossier `lexmaroc/`** (fichier local non versionné).
-   - Renseigner les clés et URL réelles (MongoDB, Qdrant, Gemini).
+   - Renseigner les clés et URL réelles (MongoDB, Qdrant, Gemini ou Groq selon `LEXMAROC_LLM`).
 
    Sous **Streamlit Cloud**, utiliser l'écran **Secrets** et reprendre exactement les mêmes noms de clés que dans `env.example.txt` (voir section déploiement).
 

@@ -101,6 +101,11 @@ def main() -> None:
         if st.button("🔄 Nouvelle conversation", use_container_width=True):
             _reinitialiser_conversation()
             st.rerun()
+        st.divider()
+        _llm = (os.environ.get("LEXMAROC_LLM", "") or "gemini").strip().lower()
+        if _llm not in ("gemini", "groq"):
+            _llm = "gemini"
+        st.caption(f"Fournisseur LLM : **{_llm}** (`LEXMAROC_LLM`)")
 
     for msg in st.session_state.messages:
         role = msg.get("role", "user")
