@@ -1,5 +1,5 @@
 """
-Interface Streamlit principale pour LexMaroc.
+Interface Streamlit principale pour ADALA AI.
 """
 
 from __future__ import annotations
@@ -20,9 +20,10 @@ load_dotenv()
 import streamlit as st
 
 st.set_page_config(
-    page_title="LexMaroc",
+    page_title="ADALA AI",
     page_icon="⚖️",
-    layout="centered",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 def _appliquer_secrets_streamlit() -> None:
@@ -41,7 +42,7 @@ def _appliquer_secrets_streamlit() -> None:
 
 _appliquer_secrets_streamlit()
 
-from backend.rag.chain import ask_lexmaroc, texte_assistant_pour_historique
+from backend.rag.chain import ask_adala, texte_assistant_pour_historique
 
 CODES_DISPONIBLES = [
     "Code du Travail",
@@ -65,47 +66,185 @@ def _reinitialiser_conversation() -> None:
     st.session_state.chat_history = []
 
 
-def main() -> None:
-    
-    _initialiser_session()
-
+def _injecter_style_chatgpt() -> None:
     st.markdown(
         """
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
         <style>
-        .lexmaroc-banner {
-            background-color: #fff3cd;
-            color: #664d03;
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem;
-            border: 1px solid #ffecb5;
+        :root {
+            --bg-app: #212121;
+            --bg-sidebar: #171717;
+            --bg-elevated: #2f2f2f;
+            --bg-input: #2f2f2f;
+            --border-subtle: #424242;
+            --text-primary: #ececec;
+            --text-muted: #a1a1aa;
+            --accent: #10a37f;
+            --chat-max: 48rem;
+        }
+        html, body, .stApp, [data-testid="stAppViewContainer"] {
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            background-color: var(--bg-app) !important;
+            color: var(--text-primary) !important;
+        }
+        [data-testid="stHeader"] {
+            background-color: var(--bg-app) !important;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        [data-testid="stToolbar"] {
+            background: transparent !important;
+        }
+        section[data-testid="stSidebar"] {
+            background-color: var(--bg-sidebar) !important;
+            border-right: 1px solid var(--border-subtle) !important;
+        }
+        section[data-testid="stSidebar"] .block-container {
+            padding-top: 1.25rem;
+        }
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3,
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] li,
+        section[data-testid="stSidebar"] span,
+        section[data-testid="stSidebar"] label {
+            color: var(--text-primary) !important;
+        }
+        section[data-testid="stSidebar"] .stCaption,
+        section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+            color: var(--text-muted) !important;
+        }
+        section[data-testid="stSidebar"] hr {
+            border-color: var(--border-subtle) !important;
+        }
+        section[data-testid="stSidebar"] code {
+            background: var(--bg-elevated) !important;
+            color: #d4d4d8 !important;
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+        }
+        section[data-testid="stMain"] .block-container {
+            max-width: var(--chat-max) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 6rem !important;
+        }
+        [data-testid="stChatMessage"] {
+            background-color: var(--bg-elevated) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 12px !important;
+            padding: 0.75rem 1rem !important;
+            margin-bottom: 0.75rem !important;
+        }
+        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {
+            color: var(--text-primary) !important;
+            line-height: 1.6 !important;
+        }
+        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+            font-size: 0.95rem !important;
+        }
+        [data-testid="stChatMessage"] label {
+            color: var(--text-muted) !important;
+            font-size: 0.75rem !important;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        [data-testid="stChatInput"] {
+            background-color: var(--bg-input) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 9999px !important;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.2) !important;
+        }
+        [data-testid="stChatInput"] textarea {
+            color: var(--text-primary) !important;
+        }
+        [data-testid="stChatInputSubmitButton"] button {
+            border-radius: 50% !important;
+        }
+        .streamlit-expanderHeader {
+            color: var(--text-primary) !important;
+            font-weight: 500 !important;
+        }
+        details.streamlit-expander {
+            background-color: var(--bg-elevated) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 10px !important;
+        }
+        details.streamlit-expander summary {
+            padding: 0.5rem 0.75rem !important;
+        }
+        details.streamlit-expander summary:hover {
+            color: var(--accent) !important;
+        }
+        .stAlert {
+            border-radius: 10px !important;
+        }
+        .adala-disclaimer {
+            background-color: var(--bg-elevated);
+            color: var(--text-muted);
+            padding: 0.85rem 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
             margin-top: 1rem;
-            font-size: 0.95rem;
+            font-size: 0.8125rem;
+            line-height: 1.45;
+            max-width: var(--chat-max);
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (max-width: 768px) {
+            section[data-testid="stMain"] .block-container {
+                padding-left: 0.65rem !important;
+                padding-right: 0.65rem !important;
+            }
+            [data-testid="stChatMessage"] {
+                padding: 0.6rem 0.75rem !important;
+            }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("# LEXMAROC")
-    st.caption("Assistant Juridique Marocain")
+
+def main() -> None:
+
+    _initialiser_session()
+    _injecter_style_chatgpt()
 
     with st.sidebar:
-        st.subheader("Codes juridiques")
-        st.markdown(
-            "Corpus indicatif (nommez vos PDF en conséquence, "
-            "par ex. `code_travail.pdf`) :"
-        )
-        for code in CODES_DISPONIBLES:
-            st.markdown(f"- {code}")
+        st.markdown("### ADALA AI")
+        st.caption("Assistant juridique marocain")
         st.divider()
-        if st.button("🔄 Nouvelle conversation", use_container_width=True):
+        if st.button(
+            "➕ Nouvelle conversation",
+            type="primary",
+            use_container_width=True,
+        ):
             _reinitialiser_conversation()
             st.rerun()
         st.divider()
-        _llm = (os.environ.get("LEXMAROC_LLM", "") or "gemini").strip().lower()
+        st.markdown("**Corpus**")
+        st.caption("Nommez vos PDF en conséquence (ex. `code_travail.pdf`).")
+        for code in CODES_DISPONIBLES:
+            st.markdown(f"- {code}")
+        st.divider()
+        _llm = (
+            os.environ.get("ADALA_LLM", "").strip()
+            or os.environ.get("LEXMAROC_LLM", "").strip()
+            or "gemini"
+        ).lower()
         if _llm not in ("gemini", "groq"):
             _llm = "gemini"
-        st.caption(f"Fournisseur LLM : **{_llm}** (`LEXMAROC_LLM`)")
+        st.caption(
+            f"LLM : **{_llm}** · `ADALA_LLM` / `LEXMAROC_LLM`"
+        )
 
     for msg in st.session_state.messages:
         role = msg.get("role", "user")
@@ -131,7 +270,7 @@ def main() -> None:
 
         with st.chat_message("assistant"):
             try:
-                resultat = ask_lexmaroc(
+                resultat = ask_adala(
                     prompt, list(st.session_state.chat_history)
                 )
                 reponse = resultat.get("answer_short") or resultat.get("answer", "")
@@ -194,7 +333,7 @@ def main() -> None:
         st.session_state.messages.append(msg_assistant)
 
     st.markdown(
-        '<div class="lexmaroc-banner">⚠️ LexMaroc est un outil d\'information. '
+        '<div class="adala-disclaimer">⚠️ ADALA AI est un outil d\'information. '
         "Il ne remplace pas les conseils d'un avocat.</div>",
         unsafe_allow_html=True,
     )

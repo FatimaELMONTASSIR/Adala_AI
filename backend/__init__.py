@@ -1,1 +1,1 @@
-"""Package principal du backend LexMaroc."""
+"""Package principal du backend ADALA AI."""

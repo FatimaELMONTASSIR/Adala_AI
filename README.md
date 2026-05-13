@@ -1,6 +1,6 @@
-# LexMaroc
+# ADALA AI
 
-**LexMaroc** est une application d'assistance juridique spécialisée dans le droit marocain (français uniquement), basée sur une architecture **RAG** (génération augmentée par récupération) et un LLM (**Gemini** Google ou **Groq**). Les textes sont indexés dans **MongoDB Atlas** et **Qdrant Cloud** ; l'interface est développée avec **Streamlit**.
+**ADALA AI** est une application d'assistance juridique spécialisée dans le droit marocain (français uniquement), basée sur une architecture **RAG** (génération augmentée par récupération) et un LLM (**Gemini** Google ou **Groq**). Les textes sont indexés dans **MongoDB Atlas** et **Qdrant Cloud** ; l'interface est développée avec **Streamlit**.
 
 ## Architecture (schéma ASCII)
 
@@ -37,10 +37,10 @@
 ## Prérequis
 
 1. **Python 3.11 ou supérieur**
-2. Clé LLM : par défaut **Gemini** — clé sur [Google AI Studio](https://aistudio.google.com/apikey), variables **`GEMINI_API_KEY`** ou **`GOOGLE_API_KEY`**. Pour **Groq**, définissez **`LEXMAROC_LLM=groq`**, **`GROQ_API_KEY`** ([console Groq](https://console.groq.com/keys)) et optionnellement **`GROQ_MODEL`** (ex. `llama-3.3-70b-versatile`).
+2. Clé LLM : par défaut **Gemini** — clé sur [Google AI Studio](https://aistudio.google.com/apikey), variables **`GEMINI_API_KEY`** ou **`GOOGLE_API_KEY`**. Pour **Groq**, définissez **`ADALA_LLM=groq`** (l’ancien nom **`LEXMAROC_LLM`** est encore accepté), **`GROQ_API_KEY`** ([console Groq](https://console.groq.com/keys)) et optionnellement **`GROQ_MODEL`** (ex. `llama-3.3-70b-versatile`).
 3. Cluster **MongoDB Atlas** (gratuit M0) et chaîne de connexion `mongodb+srv://...`
 4. Instance **Qdrant Cloud** (gratuit) : URL (`https://....qdrant.io`) et clé API
-5. Fichiers **PDF** des codes à indexer (par défaut dans `lexmaroc/data/`, ou un autre dossier via `LEXMAROC_DATA_DIR`, voir ci-dessous)
+5. Fichiers **PDF** des codes à indexer (par défaut dans `lexmaroc/data/`, ou un autre dossier via **`ADALA_DATA_DIR`** ou **`LEXMAROC_DATA_DIR`**, voir ci-dessous)
 
 ## Installation pas à pas
 
@@ -68,21 +68,21 @@
 4. Configurer les variables d'environnement :
 
    - Copier le fichier `env.example.txt` vers un fichier nommé `.env` **à la racine du dossier `lexmaroc/`** (fichier local non versionné).
-   - Renseigner les clés et URL réelles (MongoDB, Qdrant, Gemini ou Groq selon `LEXMAROC_LLM`).
+   - Renseigner les clés et URL réelles (MongoDB, Qdrant, Gemini ou Groq selon **`ADALA_LLM`** / **`LEXMAROC_LLM`**).
 
    Sous **Streamlit Cloud**, utiliser l'écran **Secrets** et reprendre exactement les mêmes noms de clés que dans `env.example.txt` (voir section déploiement).
 
-## Dossier des PDF (`LEXMAROC_DATA_DIR`)
+## Dossier des PDF (`ADALA_DATA_DIR` / `LEXMAROC_DATA_DIR`)
 
 Par défaut, l’ingestion lit les fichiers `*.pdf` dans **`lexmaroc/data/`**.
 
-Si vous avez déplacé les PDF ailleurs, définissez **`LEXMAROC_DATA_DIR`** dans `.env` ou dans l’environnement :
+Si vous avez déplacé les PDF ailleurs, définissez **`ADALA_DATA_DIR`** (ou **`LEXMAROC_DATA_DIR`**) dans `.env` ou dans l’environnement :
 
 - **Chemin absolu** (recommandé si le dossier est en dehors du projet) :  
-  `LEXMAROC_DATA_DIR=/chemin/vers/mes_pdfs`
+  `ADALA_DATA_DIR=/chemin/vers/mes_pdfs`
 - **Chemin relatif** à la racine `lexmaroc/` :  
-  `LEXMAROC_DATA_DIR=../donnees_juridiques`  
-  ou `LEXMAROC_DATA_DIR=documents/codes`
+  `ADALA_DATA_DIR=../donnees_juridiques`  
+  ou `ADALA_DATA_DIR=documents/codes`
 
 Sous **Streamlit Cloud**, ajoutez la même clé dans les secrets si l’ingestion s’exécute dans un job qui charge ce fichier d’environnement ; l’application chat n’a pas besoin de cette variable pour fonctionner une fois l’index construit.
 
@@ -96,7 +96,7 @@ python -m backend.ingestion.ingest
 
 Le script :
 
-1. lit tous les `*.pdf` dans le dossier configuré (`data/` par défaut, ou `LEXMAROC_DATA_DIR`)
+1. lit tous les `*.pdf` dans le dossier configuré (`data/` par défaut, ou `ADALA_DATA_DIR` / `LEXMAROC_DATA_DIR`)
 2. découpe le texte en articles (marqueurs du type « Article », « Art. », « ARTICLE », « Article premier »)
 3. calcule les embeddings
 4. écrit dans MongoDB (collection `articles`) et dans Qdrant (collection `lexmaroc_articles` par défaut)
@@ -124,6 +124,7 @@ Le navigateur s'ouvre sur l'interface de chat. Vérifiez que le fichier `.env` e
 
    ```toml
    GEMINI_API_KEY = "..."
+   ADALA_LLM = "gemini"
    GEMINI_MODEL = ""
    MAX_TOKENS = "1000"
    MONGO_URI = "mongodb+srv://..."
@@ -149,7 +150,7 @@ Le navigateur s'ouvre sur l'interface de chat. Vérifiez que le fichier `.env` e
 | Erreur Qdrant (401, 403) | Contrôler `QDRANT_URL` et `QDRANT_API_KEY` ; vérifier que la collection existe ou laisser le script la créer. |
 | Erreur Gemini (404 model not found) | Les noms de modèles évoluent ; laissez **`GEMINI_MODEL` vide** pour choix automatique, ou fixez un nom listé pour votre clé dans AI Studio. |
 | Erreur Gemini (quota / auth) | Vérifier `GEMINI_API_KEY` ou `GOOGLE_API_KEY` et le quota AI Studio. |
-| Aucun article après ingestion | Les PDF doivent contenir des titres d'articles reconnus par le découpeur ; voir `data/README_data.txt`. Vérifiez aussi `LEXMAROC_DATA_DIR` si vous n'utilisez pas `data/`. |
+| Aucun article après ingestion | Les PDF doivent contenir des titres d'articles reconnus par le découpeur ; voir `data/README_data.txt`. Vérifiez aussi `ADALA_DATA_DIR` / `LEXMAROC_DATA_DIR` si vous n'utilisez pas `data/`. |
 | `ModuleNotFoundError` | S'assurer d'avoir activé le bon environnement virtuel et relancé `pip install -r requirements.txt`. |
 | Déploiement Streamlit très lent au premier message | Normal : chargement de PyTorch et du modèle d'embeddings ; les requêtes suivantes sont plus rapides. |
 | Réponses hors sujet ou sans citation | Vérifier que l'ingestion a bien peuplé Qdrant ; contrôler les logs d'erreur dans l'interface Streamlit. |
@@ -157,4 +158,4 @@ Le navigateur s'ouvre sur l'interface de chat. Vérifiez que le fichier `.env` e
 
 ## Licence et avertissement
 
-LexMaroc fournit des **informations à titre indicatif** extraites des textes indexés. Il **ne remplace pas** l'analyse d'un avocat ou d'un professionnel du droit habilité au Maroc.
+ADALA AI fournit des **informations à titre indicatif** extraites des textes indexés. Il **ne remplace pas** l'analyse d'un avocat ou d'un professionnel du droit habilité au Maroc.

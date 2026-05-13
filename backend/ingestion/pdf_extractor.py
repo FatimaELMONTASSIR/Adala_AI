@@ -11,7 +11,7 @@ import pdfplumber
 
 
 def _racine_projet() -> Path:
-    """Dossier `lexmaroc/` (contient `backend/` et, par défaut, `data/`)."""
+    """Racine du projet (dossier contenant `backend/` et, par défaut, `data/`)."""
     return Path(__file__).resolve().parent.parent.parent
 
 
@@ -19,11 +19,14 @@ def get_data_directory() -> Path:
     """
     Dossier contenant les PDF sources.
 
-    Si la variable d'environnement ``LEXMAROC_DATA_DIR`` est définie (chemin
-    absolu ou relatif à la racine du projet), elle est utilisée. Sinon, le
-    dossier par défaut ``<lexmaroc>/data`` est retourné.
+    Si la variable d'environnement ``ADALA_DATA_DIR`` (ou ``LEXMAROC_DATA_DIR``)
+    est définie (chemin absolu ou relatif à la racine du projet), elle est utilisée.
+    Sinon, le dossier par défaut ``<racine>/data`` est retourné.
     """
-    override = os.environ.get("LEXMAROC_DATA_DIR", "").strip()
+    override = (
+        os.environ.get("ADALA_DATA_DIR", "").strip()
+        or os.environ.get("LEXMAROC_DATA_DIR", "").strip()
+    )
     if override:
         chemin = Path(override).expanduser()
         if not chemin.is_absolute():

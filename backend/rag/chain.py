@@ -69,8 +69,12 @@ def _format_context(sources: list[dict[str, Any]]) -> str:
 
 
 def _fournisseur_llm() -> str:
-    """``gemini`` (défaut) ou ``groq`` (voir ``LEXMAROC_LLM``)."""
-    v = (os.environ.get("LEXMAROC_LLM", "") or "gemini").strip().lower()
+    """``gemini`` (défaut) ou ``groq`` (voir ``ADALA_LLM`` ou ``LEXMAROC_LLM``)."""
+    v = (
+        os.environ.get("ADALA_LLM", "").strip()
+        or os.environ.get("LEXMAROC_LLM", "").strip()
+        or "gemini"
+    ).lower()
     if v in ("groq", "gemini"):
         return v
     return "gemini"
@@ -277,12 +281,12 @@ def _generer_avec_groq(
     return texte, messages
 
 
-def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str, Any]:
+def ask_adala(question: str, chat_history: list[dict[str, str]]) -> dict[str, Any]:
     """
     Pose une question au modèle en s'appuyant sur la recherche vectorielle.
 
     Retourne : answer / answer_short (résumé), answer_detail (optionnel), sources.
-    Fournisseur : ``LEXMAROC_LLM=gemini`` (défaut) ou ``groq``.
+    Fournisseur : ``ADALA_LLM=gemini`` (défaut) ou ``groq`` (``LEXMAROC_LLM`` accepté).
     """
     fournisseur = _fournisseur_llm()
     max_tokens = int(os.environ.get("MAX_TOKENS", "2048"))
@@ -302,7 +306,7 @@ def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str,
         cle_g = _cle_groq()
         if not cle_g:
             raise ValueError(
-                "LEXMAROC_LLM=groq : définissez GROQ_API_KEY "
+                "ADALA_LLM=groq (ou LEXMAROC_LLM=groq) : définissez GROQ_API_KEY "
                 "(https://console.groq.com/keys)."
             )
         modele_g = _groq_modele_defaut()
@@ -323,7 +327,7 @@ def ask_lexmaroc(question: str, chat_history: list[dict[str, str]]) -> dict[str,
             raise ValueError(
                 "Aucune clé API Gemini : définissez GEMINI_API_KEY ou GOOGLE_API_KEY "
                 "(ex. clé créée dans Google AI Studio), ou passez à Groq avec "
-                "LEXMAROC_LLM=groq et GROQ_API_KEY."
+                "ADALA_LLM=groq (ou LEXMAROC_LLM) et GROQ_API_KEY."
             )
         modele_demande = os.environ.get("GEMINI_MODEL", "").strip() or None
         try:
@@ -419,3 +423,7 @@ def _corriger_refus_abusif_groq(
     except Exception:
         pass
     return texte
+
+
+# Compatibilité avec l'ancien nom d'API
+ask_lexmaroc = ask_adala
